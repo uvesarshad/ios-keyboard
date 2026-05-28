@@ -37,6 +37,7 @@ final class KeyboardViewController: UIInputViewController {
     private let cursorDragController = CursorDragController()
     private let longPressController = LongPressController()
     private let clipboardManager = ClipboardManager()
+    private let languageModel = HybridLanguageModel()
     // UITextChecker is heavy — construct lazily so it doesn't run during the iOS
     // extension-launch timeout window.
     private lazy var textChecker = UITextChecker()
@@ -100,6 +101,7 @@ final class KeyboardViewController: UIInputViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        languageModel.save()
         predictionWorkItem?.cancel()
         predictionWorkItem = nil
         inputHandler.stopBackspaceRepeat()
@@ -117,6 +119,14 @@ final class KeyboardViewController: UIInputViewController {
 
     override func textDidChange(_ textInput: (any UITextInput)?) {
         super.textDidChange(textInput)
+        let context = textDocumentProxy.documentContextBeforeInput ?? ""
+        // Learn when a word was just completed (context ends with whitespace).
+        if context.last?.isWhitespace == true {
+            let words = wordsFrom(context)
+            if words.count >= 2 {
+                languageModel.learn(recentWords: Array(words.suffix(4)))
+            }
+        }
         scheduleToolbarUpdate()
     }
 
@@ -211,58 +221,68 @@ final class KeyboardViewController: UIInputViewController {
 
     private func scheduleToolbarUpdate() {
         predictionWorkItem?.cancel()
-        let isLetters = layoutManager.page == .letters
-        let context = textDocumentProxy.documentContextBeforeInput ?? ""
-        if !isLetters {
+        guard layoutManager.page == .letters else {
             keyboardView?.updatePredictionTriplet(PredictionTriplet())
             return
         }
+        let context = String((textDocumentProxy.documentContextBeforeInput ?? "").suffix(200))
         let item = DispatchWorkItem { [weak self] in
             guard let self else { return }
             let triplet = self.computeTriplet(for: context)
-            DispatchQueue.main.async {
-                self.keyboardView?.updatePredictionTriplet(triplet)
-            }
+            DispatchQueue.main.async { self.keyboardView?.updatePredictionTriplet(triplet) }
         }
         predictionWorkItem = item
-        // Background queue keeps UITextChecker off the main thread.
-        predictionQueue.asyncAfter(deadline: .now() + 0.12, execute: item)
+        predictionQueue.asyncAfter(deadline: .now() + 0.10, execute: item)
     }
 
     private func computeTriplet(for context: String) -> PredictionTriplet {
-        // Cap context: only the last 200 chars are relevant for last-word prediction.
-        let capped: String = {
-            if context.count <= 200 { return context }
-            return String(context.suffix(200))
-        }()
-        let nsContext = capped as NSString
-        let lastWordRange = nsContext.range(of: "\\S+$", options: .regularExpression)
-        guard lastWordRange.location != NSNotFound else { return PredictionTriplet() }
-
-        let partial = nsContext.substring(with: lastWordRange)
-        let partialNS = partial as NSString
-        let range = NSRange(location: 0, length: partialNS.length)
-        let lang = "en_US"
-
         var triplet = PredictionTriplet()
-        triplet.typed = partial
 
-        // Spell correction: only if word is misspelled
-        let misspelledRange = textChecker.rangeOfMisspelledWord(in: partial, range: range, startingAt: 0, wrap: false, language: lang)
-        if misspelledRange.location != NSNotFound {
-            if let guesses = textChecker.guesses(forWordRange: range, in: partial, language: lang),
-               let first = guesses.first, first.caseInsensitiveCompare(partial) != .orderedSame {
-                triplet.correction = first
+        // Determine if cursor is mid-word or after a space
+        let afterSpace = context.last?.isWhitespace ?? true
+
+        if afterSpace {
+            // ── Next-word mode ── hybrid language model
+            let prev = wordsFrom(context)
+            let predictions = languageModel.predict(previousWords: Array(prev.suffix(2)), count: 3)
+            if predictions.count >= 1 { triplet.completion  = predictions[0] }
+            if predictions.count >= 2 { triplet.correction  = predictions[1] }
+            if predictions.count >= 3 { triplet.typed       = predictions[2] }
+        } else {
+            // ── Mid-word mode ── UITextChecker completions + spell correction
+            let nsCtx = context as NSString
+            let lastWordRange = nsCtx.range(of: "\\S+$", options: .regularExpression)
+            guard lastWordRange.location != NSNotFound else { return triplet }
+            let partial = nsCtx.substring(with: lastWordRange)
+            let range = NSRange(location: 0, length: (partial as NSString).length)
+            let lang = "en_US"
+
+            triplet.typed = partial
+
+            // Spell correction
+            let bad = textChecker.rangeOfMisspelledWord(
+                in: partial, range: range, startingAt: 0, wrap: false, language: lang)
+            if bad.location != NSNotFound,
+               let guess = textChecker.guesses(forWordRange: range, in: partial, language: lang)?
+                   .first(where: { $0.caseInsensitiveCompare(partial) != .orderedSame }) {
+                triplet.correction = guess
+            }
+
+            // Completion
+            if let comp = textChecker.completions(forPartialWordRange: range, in: partial, language: lang)?
+                .first(where: { $0.caseInsensitiveCompare(partial) != .orderedSame }) {
+                triplet.completion = comp
             }
         }
 
-        // Completion
-        if let completions = textChecker.completions(forPartialWordRange: range, in: partial, language: lang) {
-            let first = completions.first { $0.caseInsensitiveCompare(partial) != .orderedSame }
-            triplet.completion = first
-        }
-
         return triplet
+    }
+
+    // Splits text into clean lowercase words (no punctuation, no empty, max 25 chars)
+    private func wordsFrom(_ text: String) -> [String] {
+        text.components(separatedBy: .whitespacesAndNewlines)
+            .map { $0.trimmingCharacters(in: .punctuationCharacters).lowercased() }
+            .filter { !$0.isEmpty && $0.count <= 25 }
     }
 
     // MARK: - Backspace dual mode
@@ -543,25 +563,33 @@ extension KeyboardViewController: KeyboardViewDelegate {
     }
 
     func keyboardView(_ view: KeyboardView, didTapPrediction kind: PredictionKind, word: String) {
-        switch kind {
-        case .typed:
-            learnTypedWord(word)
-            scheduleToolbarUpdate()
+        let context = textDocumentProxy.documentContextBeforeInput ?? ""
+        let afterSpace = context.last?.isWhitespace ?? true
 
-        case .correction, .completion:
-            // Replace the partial word with the chosen word + trailing space
-            let before = textDocumentProxy.documentContextBeforeInput ?? ""
-            let nsStr = before as NSString
-            let lastWordRange = nsStr.range(of: "\\S+$", options: .regularExpression)
-            if lastWordRange.location != NSNotFound {
-                let partialLen = (nsStr.substring(with: lastWordRange) as NSString).length
-                for _ in 0..<partialLen { textDocumentProxy.deleteBackward() }
-            }
+        if afterSpace {
+            // Next-word mode: all three chips are predictions — just insert
             textDocumentProxy.insertText(word + " ")
             layoutManager.autoLowerAfterInput()
             inputHandler.fireFeedback()
-            scheduleToolbarUpdate()
+        } else {
+            switch kind {
+            case .typed:
+                // Teach this word to the personal dictionary
+                learnTypedWord(word)
+            case .correction, .completion:
+                // Replace the partial word with the chosen word
+                let nsStr = context as NSString
+                let lastWordRange = nsStr.range(of: "\\S+$", options: .regularExpression)
+                if lastWordRange.location != NSNotFound {
+                    let partialLen = (nsStr.substring(with: lastWordRange) as NSString).length
+                    for _ in 0..<partialLen { textDocumentProxy.deleteBackward() }
+                }
+                textDocumentProxy.insertText(word + " ")
+                layoutManager.autoLowerAfterInput()
+                inputHandler.fireFeedback()
+            }
         }
+        scheduleToolbarUpdate()
     }
 }
 
