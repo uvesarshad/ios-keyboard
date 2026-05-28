@@ -18,6 +18,7 @@ final class InputHandler {
     func handleTap(_ key: Key, sourceView: UIView? = nil, event: UIEvent? = nil) {
         guard let proxy = delegate?.textDocumentProxy else { return }
         fireHaptic()
+        UIDevice.current.playInputClick()
 
         switch key.kind {
         case .character:
@@ -82,6 +83,7 @@ final class InputHandler {
         lastInputWasSpace = false
         layoutManager?.autoLowerAfterInput()
         fireHaptic()
+        UIDevice.current.playInputClick()
     }
 
     func startBackspaceRepeat() {
@@ -96,8 +98,9 @@ final class InputHandler {
         backspaceTimer = nil
     }
 
+    // Haptics do NOT require Full Access on iOS — only pasteboard does.
     private func fireHaptic() {
-        guard delegate?.hasFullAccess == true, hapticIntensity != .off else { return }
+        guard hapticIntensity != .off else { return }
         HapticEngine.shared.fire(intensity: hapticIntensity)
     }
 }

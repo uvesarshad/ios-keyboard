@@ -5,6 +5,9 @@ protocol KeyboardViewDelegate: AnyObject {
     func keyboardView(_ view: KeyboardView, touchesMovedOn keyView: KeyView, touches: Set<UITouch>, event: UIEvent?)
     func keyboardView(_ view: KeyboardView, touchesEndedOn keyView: KeyView, touches: Set<UITouch>, event: UIEvent?)
     func keyboardView(_ view: KeyboardView, touchesCancelledOn keyView: KeyView, touches: Set<UITouch>, event: UIEvent?)
+    func keyboardViewDidTapEmoji(_ view: KeyboardView, sourceView: UIView, event: UIEvent)
+    func keyboardViewDidTapClipboard(_ view: KeyboardView)
+    func keyboardView(_ view: KeyboardView, didSelectPrediction word: String)
 }
 
 final class KeyboardView: UIView {
@@ -13,24 +16,24 @@ final class KeyboardView: UIView {
     private let layoutManager: LayoutManager
     private let settings: TactlSettings
     private(set) var theme: KeyboardTheme
-    private let showGlobe: Bool
 
     private var keyViews: [KeyView] = []
+    private var cachedRows: [[Key]] = []
     private var fullAccessBanner: UIView?
+    private let toolbar: ToolbarView
 
-    // Layout constants
     private let hPad: CGFloat = 3
     private let vPad: CGFloat = 6
     private let keyGap: CGFloat = 6
     private let rowGap: CGFloat = 8
 
-    init(layoutManager: LayoutManager, settings: TactlSettings, theme: KeyboardTheme, showGlobe: Bool) {
+    init(layoutManager: LayoutManager, settings: TactlSettings, theme: KeyboardTheme) {
         self.layoutManager = layoutManager
         self.settings = settings
         self.theme = theme
-        self.showGlobe = showGlobe
+        self.toolbar = ToolbarView(theme: theme)
         super.init(frame: .zero)
-        layoutManager.showGlobe = showGlobe
+        setupToolbar()
         rebuild()
     }
 
@@ -39,6 +42,7 @@ final class KeyboardView: UIView {
     func applyTheme(_ newTheme: KeyboardTheme) {
         theme = newTheme
         backgroundColor = newTheme.keyboardBackground
+        toolbar.applyTheme(newTheme)
         refresh()
     }
 
@@ -46,23 +50,34 @@ final class KeyboardView: UIView {
         rebuild()
     }
 
+    func updatePredictions(_ words: [String]) {
+        toolbar.updatePredictions(words)
+    }
+
+    func showBackspaceIndicator(wordCount: Int) {
+        toolbar.showBackspaceIndicator(wordCount: wordCount)
+    }
+
+    func hideBackspaceIndicator() {
+        toolbar.hideBackspaceIndicator()
+    }
+
     func showFullAccessBanner(_ show: Bool) {
         fullAccessBanner?.removeFromSuperview()
         fullAccessBanner = nil
         guard show else { return }
-
         let banner = UILabel()
-        banner.text = "Enable Full Access in Settings for clipboard & haptics"
+        banner.text = "Enable Full Access in Settings for clipboard history"
         banner.font = .systemFont(ofSize: 10)
         banner.textAlignment = .center
         banner.textColor = theme.keyText.withAlphaComponent(0.6)
-        banner.backgroundColor = theme.functionKeyBackground.withAlphaComponent(0.7)
+        banner.backgroundColor = theme.functionKeyBackground.withAlphaComponent(0.8)
         banner.translatesAutoresizingMaskIntoConstraints = false
         addSubview(banner)
         NSLayoutConstraint.activate([
             banner.leadingAnchor.constraint(equalTo: leadingAnchor),
             banner.trailingAnchor.constraint(equalTo: trailingAnchor),
-            banner.topAnchor.constraint(equalTo: topAnchor),
+            banner.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
             banner.heightAnchor.constraint(equalToConstant: 18),
         ])
         fullAccessBanner = banner
@@ -70,21 +85,27 @@ final class KeyboardView: UIView {
 
     // MARK: - Private
 
-    private func rebuild() {
-        keyViews.forEach { $0.removeFromSuperview() }
-        keyViews.removeAll()
-        backgroundColor = theme.keyboardBackground
-
-        let allRows = buildRows()
-        for row in allRows {
-            for key in row {
-                let kv = KeyView(key: key)
-                kv.delegate = self
-                addSubview(kv)
-                keyViews.append(kv)
-            }
+    private func setupToolbar() {
+        toolbar.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(toolbar)
+        NSLayoutConstraint.activate([
+            toolbar.leadingAnchor.constraint(equalTo: leadingAnchor),
+            toolbar.trailingAnchor.constraint(equalTo: trailingAnchor),
+            toolbar.topAnchor.constraint(equalTo: topAnchor),
+            toolbar.heightAnchor.constraint(equalToConstant: ToolbarView.height),
+        ])
+        toolbar.onEmojiTapped = { [weak self] sourceView, event in
+            guard let self else { return }
+            self.delegate?.keyboardViewDidTapEmoji(self, sourceView: sourceView, event: event)
         }
-        setNeedsLayout()
+        toolbar.onClipboardTapped = { [weak self] in
+            guard let self else { return }
+            self.delegate?.keyboardViewDidTapClipboard(self)
+        }
+        toolbar.onPredictionSelected = { [weak self] word in
+            guard let self else { return }
+            self.delegate?.keyboardView(self, didSelectPrediction: word)
+        }
     }
 
     private func buildRows() -> [[Key]] {
@@ -96,31 +117,48 @@ final class KeyboardView: UIView {
         return rows
     }
 
+    private func rebuild() {
+        keyViews.forEach { $0.removeFromSuperview() }
+        keyViews.removeAll()
+        backgroundColor = theme.keyboardBackground
+
+        cachedRows = buildRows()
+        for row in cachedRows {
+            for key in row {
+                let kv = KeyView(key: key)
+                kv.delegate = self
+                addSubview(kv)
+                keyViews.append(kv)
+            }
+        }
+        setNeedsLayout()
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
+        guard !keyViews.isEmpty else { return }
 
-        let bannerHeight: CGFloat = fullAccessBanner != nil ? 18 : 0
-        let availH = bounds.height - bannerHeight
+        let toolbarH = ToolbarView.height
+        let bannerH: CGFloat = fullAccessBanner != nil ? 18 : 0
+        let topOffset = toolbarH + bannerH
+        let availH = bounds.height - topOffset
         let availW = bounds.width - 2 * hPad
 
-        let allRows = buildRows()
-        let numRows = allRows.count
+        let numRows = cachedRows.count
         guard numRows > 0 else { return }
 
-        let totalRowGaps = rowGap * CGFloat(numRows - 1)
-        let totalRowH = availH - 2 * vPad - totalRowGaps
+        let totalRowH = availH - 2 * vPad - rowGap * CGFloat(numRows - 1)
         let rowH = max(1, totalRowH / CGFloat(numRows))
 
         var keyViewIter = keyViews.makeIterator()
 
-        for (ri, row) in allRows.enumerated() {
-            let rowY = bannerHeight + vPad + CGFloat(ri) * (rowH + rowGap)
-            let isLetterRow2 = ri == (settings.numberRowEnabled && layoutManager.page == .letters ? 2 : 1)
-                               && layoutManager.page == .letters
+        for (ri, row) in cachedRows.enumerated() {
+            let rowY = topOffset + vPad + CGFloat(ri) * (rowH + rowGap)
 
-            // For row 2 (ASDF…) apply a small centering inset
-            let charWidth = unitWidth(for: row, availWidth: availW)
-            let inset = isLetterRow2 ? charWidth / 2 : 0
+            let isLetterRow2 = layoutManager.page == .letters
+                && ri == (settings.numberRowEnabled ? 2 : 1)
+            let unitW = charUnitWidth(for: row, availW: availW)
+            let inset = isLetterRow2 ? unitW / 2 : 0
             let effectiveW = availW - 2 * inset
             let effectiveLeft = hPad + inset
 
@@ -131,10 +169,10 @@ final class KeyboardView: UIView {
             var x = effectiveLeft
             for key in row {
                 guard let kv = keyViewIter.next() else { continue }
-                let w = unit * key.widthWeight
+                let w = max(1, unit * key.widthWeight)
                 kv.frame = CGRect(x: x, y: rowY, width: w, height: rowH)
                 kv.configure(
-                    labelText: labelText(for: key),
+                    labelText: layoutManager.labelForKey(key),
                     theme: theme,
                     shiftState: layoutManager.shiftState
                 )
@@ -143,15 +181,10 @@ final class KeyboardView: UIView {
         }
     }
 
-    private func unitWidth(for row: [Key], availWidth: CGFloat) -> CGFloat {
-        // Returns the width of a weight-1.0 key in this row (all character keys are weight 1.0)
+    private func charUnitWidth(for row: [Key], availW: CGFloat) -> CGFloat {
         let totalWeight = row.reduce(0.0) { $0 + $1.widthWeight }
         let gaps = keyGap * CGFloat(max(0, row.count - 1))
-        return (availWidth - gaps) / totalWeight
-    }
-
-    private func labelText(for key: Key) -> String {
-        layoutManager.labelForKey(key)
+        return (availW - gaps) / totalWeight
     }
 }
 

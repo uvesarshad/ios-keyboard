@@ -56,25 +56,19 @@ enum KeyboardLayout {
         Key(label: "8", variants: ["*", "×"]),
         Key(label: "9", variants: ["("]),
         Key(label: "0", variants: [")"]),
-        Key(label: "📋", shiftedLabel: "📋", widthWeight: 1.0, kind: .clipboard),
     ]
 
     // MARK: - Function rows
+    // Globe (🌐) is always shown — gives access to emoji keyboard and other input methods.
 
-    static func functionRow(showGlobe: Bool) -> [Key] {
-        var keys: [Key] = []
-        if showGlobe {
-            keys.append(Key(label: "🌐", shiftedLabel: "🌐", widthWeight: 1.0, kind: .nextKeyboard))
-        }
-        keys += [
-            Key(label: "?123", shiftedLabel: "?123", widthWeight: 1.5, kind: .symbolToggle),
-            Key(label: ",", shiftedLabel: ",", variants: ["!", "\"", "'", "#"], kind: .comma),
-            Key(label: " ", shiftedLabel: " ", widthWeight: 5.0, kind: .space),
-            Key(label: ".", shiftedLabel: ".", variants: ["…", "·", "•"], kind: .period),
-            Key(label: "return", shiftedLabel: "return", widthWeight: 2.0, kind: .return),
-        ]
-        return keys
-    }
+    static let functionRow: [Key] = [
+        Key(label: "🌐", shiftedLabel: "🌐", widthWeight: 1.2, kind: .nextKeyboard),
+        Key(label: "?123", shiftedLabel: "?123", widthWeight: 1.5, kind: .symbolToggle),
+        Key(label: ",", shiftedLabel: ",", variants: ["!", "\"", "'", "#"], kind: .comma),
+        Key(label: " ", shiftedLabel: " ", widthWeight: 5.0, kind: .space),
+        Key(label: ".", shiftedLabel: ".", variants: ["…", "·", "•"], kind: .period),
+        Key(label: "return", shiftedLabel: "return", widthWeight: 2.0, kind: .return),
+    ]
 
     // MARK: - Symbols1 (?123)
 
@@ -99,20 +93,14 @@ enum KeyboardLayout {
 
     static let symbols1Rows: [[Key]] = [symbols1Row1, symbols1Row2, symbols1Row3]
 
-    static func symbols1FunctionRow(showGlobe: Bool) -> [Key] {
-        var keys: [Key] = []
-        if showGlobe {
-            keys.append(Key(label: "🌐", shiftedLabel: "🌐", widthWeight: 1.0, kind: .nextKeyboard))
-        }
-        keys += [
-            Key(label: "ABC", shiftedLabel: "ABC", widthWeight: 1.5, kind: .letterToggle),
-            Key(label: ",", kind: .comma),
-            Key(label: " ", widthWeight: 5.0, kind: .space),
-            Key(label: ".", kind: .period),
-            Key(label: "return", widthWeight: 2.0, kind: .return),
-        ]
-        return keys
-    }
+    static let symbols1FunctionRow: [Key] = [
+        Key(label: "🌐", shiftedLabel: "🌐", widthWeight: 1.2, kind: .nextKeyboard),
+        Key(label: "ABC", shiftedLabel: "ABC", widthWeight: 1.5, kind: .letterToggle),
+        Key(label: ",", kind: .comma),
+        Key(label: " ", widthWeight: 5.0, kind: .space),
+        Key(label: ".", kind: .period),
+        Key(label: "return", widthWeight: 2.0, kind: .return),
+    ]
 
     // MARK: - Symbols2 (=\<)
 
@@ -137,18 +125,12 @@ enum KeyboardLayout {
 
     static let symbols2Rows: [[Key]] = [symbols2Row1, symbols2Row2, symbols2Row3]
 
-    static func symbols2FunctionRow(showGlobe: Bool) -> [Key] {
-        var keys: [Key] = []
-        if showGlobe {
-            keys.append(Key(label: "🌐", shiftedLabel: "🌐", widthWeight: 1.0, kind: .nextKeyboard))
-        }
-        keys += [
-            Key(label: "ABC", shiftedLabel: "ABC", widthWeight: 1.5, kind: .letterToggle),
-            Key(label: ",", kind: .comma),
-            Key(label: " ", widthWeight: 5.0, kind: .space),
-            Key(label: ".", kind: .period),
-            Key(label: "return", widthWeight: 2.0, kind: .return),
-        ]
-        return keys
-    }
+    static let symbols2FunctionRow: [Key] = [
+        Key(label: "🌐", shiftedLabel: "🌐", widthWeight: 1.2, kind: .nextKeyboard),
+        Key(label: "ABC", shiftedLabel: "ABC", widthWeight: 1.5, kind: .letterToggle),
+        Key(label: ",", kind: .comma),
+        Key(label: " ", widthWeight: 5.0, kind: .space),
+        Key(label: ".", kind: .period),
+        Key(label: "return", widthWeight: 2.0, kind: .return),
+    ]
 }
