@@ -96,6 +96,7 @@ final class EmojiPanelView: UIView {
     // This avoids timing issues where UICollectionView renders before constraints resolve.
     private var collectionView: UICollectionView!
     private var categoryBar: UIView!
+    private var backButton: UIButton!
     private var categoryButtons: [UIButton] = []
     private var selectedCategory = 0
     private var theme: KeyboardTheme
@@ -135,10 +136,13 @@ final class EmojiPanelView: UIView {
             width: bounds.width, height: bounds.height - barHeight
         )
 
-        // Category buttons evenly distributed
-        let btnW = bounds.width / CGFloat(max(1, categoryButtons.count))
+        // Back button fixed on the left, category buttons fill the rest
+        let backW: CGFloat = 44
+        backButton.frame = CGRect(x: 0, y: 0, width: backW, height: barHeight)
+        let remaining = bounds.width - backW
+        let btnW = remaining / CGFloat(max(1, categoryButtons.count))
         for (i, btn) in categoryButtons.enumerated() {
-            btn.frame = CGRect(x: CGFloat(i) * btnW, y: 0, width: btnW, height: barHeight)
+            btn.frame = CGRect(x: backW + CGFloat(i) * btnW, y: 0, width: btnW, height: barHeight)
         }
 
         // Update flow layout item size based on actual width
@@ -179,6 +183,12 @@ final class EmojiPanelView: UIView {
         categoryBar.backgroundColor = theme.functionKeyBackground
         addSubview(categoryBar)
 
+        backButton = UIButton(type: .system)
+        let backCfg = UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+        backButton.setImage(UIImage(systemName: "keyboard.chevron.compact.down", withConfiguration: backCfg), for: .normal)
+        backButton.addTarget(self, action: #selector(backTapped), for: .touchUpInside)
+        categoryBar.addSubview(backButton)
+
         for (i, cat) in emojiCategories.enumerated() {
             let btn = UIButton(type: .system)
             let cfg = UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)
@@ -193,11 +203,16 @@ final class EmojiPanelView: UIView {
     }
 
     private func updateCategoryHighlight() {
+        backButton.tintColor = theme.keyText.withAlphaComponent(0.6)
         for (i, btn) in categoryButtons.enumerated() {
             btn.tintColor = i == selectedCategory
                 ? theme.accentColor
                 : theme.keyText.withAlphaComponent(0.45)
         }
+    }
+
+    @objc private func backTapped() {
+        delegate?.emojiPanelDidDismiss(self)
     }
 
     @objc private func categoryTapped(_ sender: UIButton) {

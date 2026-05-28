@@ -510,10 +510,7 @@ extension KeyboardViewController: KeyboardViewDelegate {
             toggleEmojiPanel()
 
         default:
-            let wasConsumed = longPressController.isShowingPopup || longPressController.didConsume
-            if longPressController.isShowingPopup {
-                dismissPopup()
-            }
+            let wasConsumed = longPressController.didConsume
             longPressController.touchesEnded()
             if !wasConsumed {
                 inputHandler.handleTap(keyView.key, sourceView: keyView, event: event)

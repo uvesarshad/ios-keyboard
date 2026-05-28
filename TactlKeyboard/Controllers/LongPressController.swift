@@ -70,18 +70,17 @@ final class LongPressController {
     }
 
     private func timerFired() {
-        guard let key = pendingKey, let sourceView = pendingSourceView else { return }
+        guard let key = pendingKey else { return }
         if key.kind == .comma {
             didConsume = true
             delegate?.longPressControllerOpenSettings(self)
             return
         }
         guard !key.variants.isEmpty else { return }
-        // Always show the popup, even for single-variant keys — gives visual feedback
-        // of what will be typed, and the user commits by lifting the finger.
-        isShowingPopup = true
+        // Type the first variant immediately — no popup, no slide-to-select.
+        // The key's pressed highlight already provides visual feedback during hold.
         didConsume = true
-        delegate?.longPressController(self, showPopupFor: key, sourceView: sourceView)
+        delegate?.longPressController(self, didSelectVariant: key.variants[0])
     }
 }
 
