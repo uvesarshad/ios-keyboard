@@ -48,6 +48,7 @@ final class KeyboardViewController: UIInputViewController {
     private var clipboardPanel: ClipboardPanelView?
     private var emojiPanel: EmojiPanelView?
     private var popupView: KeyPopupView?
+    private let keyPreview = KeyPreviewView()
     private var personalWords: Set<String> = []
 
     // Backspace state
@@ -471,7 +472,26 @@ extension KeyboardViewController: KeyboardViewDelegate {
             break
 
         default:
+            showKeyPreview(for: keyView)
             longPressController.touchesBegan(key: keyView.key, sourceView: keyView)
+        }
+    }
+
+    private func showKeyPreview(for keyView: KeyView) {
+        guard settings.keyPopupEnabled else { return }
+        // Only character-producing keys get the magnified pop preview.
+        switch keyView.key.kind {
+        case .character, .comma, .period:
+            guard let container = keyboardView else { return }
+            let frame = keyView.convert(keyView.bounds, to: container)
+            keyPreview.present(
+                text: layoutManager.labelForKey(keyView.key),
+                keyFrame: frame,
+                theme: theme,
+                in: container
+            )
+        default:
+            break
         }
     }
 
@@ -511,6 +531,7 @@ extension KeyboardViewController: KeyboardViewDelegate {
         touches: Set<UITouch>,
         event: UIEvent?
     ) {
+        keyPreview.dismiss()
         switch keyView.key.kind {
         case .space where settings.spaceCursorEnabled:
             if cursorDragController.touchesEnded() {
@@ -545,6 +566,7 @@ extension KeyboardViewController: KeyboardViewDelegate {
         touches: Set<UITouch>,
         event: UIEvent?
     ) {
+        keyPreview.dismiss()
         inputHandler.stopBackspaceRepeat()
         if backspaceSwipeActive {
             exitBackspaceWordMode(commit: false)

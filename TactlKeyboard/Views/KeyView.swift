@@ -30,10 +30,9 @@ final class KeyView: UIView {
         layer.shadowOffset = CGSize(width: 0, height: 1)
         layer.shadowOpacity = 0.3
         layer.shadowRadius = 0
-        // shouldRasterize + shadowPath drops the per-frame offscreen pass that
-        // shadows normally trigger — important when rendering 30+ keys.
-        layer.shouldRasterize = true
-        layer.rasterizationScale = UIScreen.main.scale
+        // shadowPath (set in layoutSubviews) makes the shadow cheap without
+        // rasterizing — rasterizing would re-render every frame of the press
+        // animation, which causes stutter on the most frequent action.
         layer.masksToBounds = false
 
         label.textAlignment = .center

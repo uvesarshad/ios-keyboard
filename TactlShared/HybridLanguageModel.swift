@@ -289,18 +289,28 @@ final class HybridLanguageModel {
     private let saveEvery = 100
     private let trigramMinTotal = 3  // need this many trigram observations to trust it
 
+    // All access to the dictionaries goes through this serial queue: writes (learn)
+    // and reads (predict) never overlap, and nothing runs on the main thread.
+    private let queue = DispatchQueue(label: "tactl.languagemodel")
+
     private var fileURL: URL {
         AppGroup.containerURL.appendingPathComponent("language_model.json")
     }
 
     init() {
-        load()
+        // Load on the queue so construction never does a main-thread file read.
+        // Enqueued before any predict()/learn(), so the first call sees loaded data.
+        queue.async { [weak self] in self?.loadFromDisk() }
     }
 
-    // MARK: - Learn
+    // MARK: - Learn (async — never blocks the keystroke)
 
     /// Call with the last few words (already split, in order) whenever a word is completed.
     func learn(recentWords: [String]) {
+        queue.async { [weak self] in self?.applyLearn(recentWords) }
+    }
+
+    private func applyLearn(_ recentWords: [String]) {
         let words = recentWords
             .map { $0.lowercased().trimmingCharacters(in: CharacterSet.punctuationCharacters) }
             .filter { !$0.isEmpty && $0.unicodeScalars.count >= 2 && $0.unicodeScalars.count <= 25 }
@@ -316,15 +326,19 @@ final class HybridLanguageModel {
 
         wordsSinceLastSave += 1
         if wordsSinceLastSave >= saveEvery {
-            save()
+            writeToDisk()
             wordsSinceLastSave = 0
         }
     }
 
-    // MARK: - Predict
+    // MARK: - Predict (sync on the queue — caller is already off the main thread)
 
     /// Returns up to `count` next-word predictions given the last 1-2 complete words.
     func predict(previousWords: [String], count: Int = 3) -> [String] {
+        queue.sync { computePredictions(previousWords: previousWords, count: count) }
+    }
+
+    private func computePredictions(previousWords: [String], count: Int) -> [String] {
         let words = previousWords
             .map { $0.lowercased().trimmingCharacters(in: CharacterSet.punctuationCharacters) }
             .filter { !$0.isEmpty }
@@ -367,13 +381,18 @@ final class HybridLanguageModel {
         var trigrams: [String: [String: [String: Int]]]
     }
 
+    /// Flush to disk. Sync so it completes before the extension may be suspended.
     func save() {
+        queue.sync { writeToDisk() }
+    }
+
+    private func writeToDisk() {
         let stored = Stored(bigrams: personalBigrams, trigrams: personalTrigrams)
         guard let data = try? JSONEncoder().encode(stored) else { return }
         try? data.write(to: fileURL, options: [.atomic, .completeFileProtection])
     }
 
-    private func load() {
+    private func loadFromDisk() {
         guard let data = try? Data(contentsOf: fileURL),
               let stored = try? JSONDecoder().decode(Stored.self, from: data)
         else { return }
