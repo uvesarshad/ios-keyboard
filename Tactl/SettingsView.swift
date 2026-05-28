@@ -18,14 +18,14 @@ struct SettingsView: View {
             }
             .navigationTitle("Tactl Keyboard")
         }
-        .onChange(of: store.current.keyboardHeight) { store.save() }
-        .onChange(of: store.current.longPressDuration) { store.save() }
-        .onChange(of: store.current.spaceCursorEnabled) { store.save() }
-        .onChange(of: store.current.spaceCursorVerticalEnabled) { store.save() }
-        .onChange(of: store.current.numberRowEnabled) { store.save() }
-        .onChange(of: store.current.clipboardEnabled) { store.save() }
-        .onChange(of: store.current.hapticIntensity) { store.save() }
-        .onChange(of: store.current.theme) { store.save() }
+        .onChange(of: store.current.keyboardHeight) { _ in store.save() }
+        .onChange(of: store.current.longPressDuration) { _ in store.save() }
+        .onChange(of: store.current.spaceCursorEnabled) { _ in store.save() }
+        .onChange(of: store.current.spaceCursorVerticalEnabled) { _ in store.save() }
+        .onChange(of: store.current.numberRowEnabled) { _ in store.save() }
+        .onChange(of: store.current.clipboardEnabled) { _ in store.save() }
+        .onChange(of: store.current.hapticIntensity) { _ in store.save() }
+        .onChange(of: store.current.theme) { _ in store.save() }
     }
 
     @ViewBuilder
