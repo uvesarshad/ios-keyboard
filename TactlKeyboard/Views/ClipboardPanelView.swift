@@ -122,7 +122,7 @@ extension ClipboardPanelView: UITableViewDataSource, UITableViewDelegate {
 }
 
 private final class ClipboardCell: UITableViewCell {
-    private let pinIcon = UILabel()
+    private let pinIcon = UIImageView()
     private let previewLabel = UILabel()
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
@@ -131,8 +131,8 @@ private final class ClipboardCell: UITableViewCell {
         contentView.backgroundColor = .clear
         selectionStyle = .gray
 
-        pinIcon.font = .systemFont(ofSize: 12)
-        pinIcon.text = "📌"
+        pinIcon.image = UIImage(systemName: "pin.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .medium))
+        pinIcon.contentMode = .center
         pinIcon.translatesAutoresizingMaskIntoConstraints = false
 
         previewLabel.font = .systemFont(ofSize: 14)
@@ -156,7 +156,10 @@ private final class ClipboardCell: UITableViewCell {
 
     func configure(entry: ClipboardEntry, theme: KeyboardTheme) {
         pinIcon.isHidden = !entry.pinned
-        previewLabel.text = entry.text.replacingOccurrences(of: "\n", with: " ")
+        pinIcon.tintColor = theme.accentColor
+        // Cap preview to avoid huge labels lagging the cell layout
+        let safe = entry.text.prefix(120).replacingOccurrences(of: "\n", with: " ")
+        previewLabel.text = String(safe)
         previewLabel.textColor = theme.keyText
     }
 }

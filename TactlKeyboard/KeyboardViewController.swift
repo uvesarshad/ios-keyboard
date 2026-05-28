@@ -1,37 +1,65 @@
 import UIKit
 
-// UIInputView subclass so the system honours UIInputViewAudioFeedback for key clicks.
+// UIInputView subclass that:
+// 1. Conforms to UIInputViewAudioFeedback so the system plays key clicks.
+// 2. Drives its own height through intrinsicContentSize (the documented Apple
+//    pattern for allowsSelfSizing = true). Adding an external NSLayoutConstraint
+//    on the input view's height creates an Auto Layout conflict that some host
+//    apps (WhatsApp, complex layouts) resolve by falling back to the system keyboard.
 private final class TactlInputView: UIInputView, UIInputViewAudioFeedback {
     var enableInputClicksWhenVisible: Bool { true }
+
+    private var heightConstraint: NSLayoutConstraint?
+
+    var keyboardHeight: CGFloat = 280 {
+        didSet {
+            heightConstraint?.constant = keyboardHeight
+        }
+    }
+
     init() {
         super.init(frame: .zero, inputViewStyle: .keyboard)
         allowsSelfSizing = true
+        // Own our height via a self-contained constraint.
+        // Priority 999 lets the system override in edge cases without constraint conflicts.
+        let hc = heightAnchor.constraint(equalToConstant: keyboardHeight)
+        hc.priority = UILayoutPriority(999)
+        hc.isActive = true
+        heightConstraint = hc
     }
     required init?(coder: NSCoder) { fatalError() }
 }
 
 final class KeyboardViewController: UIInputViewController {
 
-    // Controllers
     private let layoutManager = LayoutManager()
     private let inputHandler = InputHandler()
     private let cursorDragController = CursorDragController()
     private let longPressController = LongPressController()
     private let clipboardManager = ClipboardManager()
+    // UITextChecker is heavy — construct lazily so it doesn't run during the iOS
+    // extension-launch timeout window.
+    private lazy var textChecker = UITextChecker()
 
-    // State
     private var settings = TactlSettings()
     private var theme: KeyboardTheme = .light
-    private var heightConstraint: NSLayoutConstraint?
     private var keyboardView: KeyboardView?
     private var clipboardPanel: ClipboardPanelView?
+    private var emojiPanel: EmojiPanelView?
     private var popupView: KeyPopupView?
+    private var personalWords: Set<String> = []
 
-    // Backspace swipe state
-    private var backspaceSwipeTimer: Timer?
+    // Backspace state
     private var backspaceSwipeActive = false
-    private var backspaceSwipeStartX: CGFloat = 0
-    private var backspaceSwipeWordCount: Int = 0
+    private var backspaceTouchStartX: CGFloat = 0
+    private var backspaceTouchedDragThreshold: Bool = false
+    private var backspaceWordCount: Int = 0
+    private let backspaceDragThreshold: CGFloat = 18
+    private let backspacePointsPerWord: CGFloat = 30
+
+    // Prediction debounce
+    private var predictionWorkItem: DispatchWorkItem?
+    private let predictionQueue = DispatchQueue(label: "tactl.predictions", qos: .userInitiated)
 
     // MARK: - Lifecycle
 
@@ -39,26 +67,57 @@ final class KeyboardViewController: UIInputViewController {
         view = TactlInputView()
     }
 
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        // Build the keyboard once on first load. viewWillAppear only applies diffs.
         settings = Settings.load()
         applySettings()
         rebuildKeyboard()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard let self else { return }
-            self.clipboardManager.capturePasteboardIfChanged(hasFullAccess: self.hasFullAccess)
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            self?.loadPersonalDictionary()
+        }
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: KeyboardViewController, _) in
+            self.theme = self.resolvedTheme()
+            self.keyboardView?.applyTheme(self.theme)
+            self.emojiPanel?.applyTheme(self.theme)
         }
     }
 
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        theme = resolvedTheme()
-        keyboardView?.applyTheme(theme)
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        let newSettings = Settings.load()
+        guard newSettings != settings else { return }
+        let needsRebuild = newSettings.numberRowEnabled != settings.numberRowEnabled
+        settings = newSettings
+        applySettings()
+        if needsRebuild {
+            rebuildKeyboard()
+        } else {
+            keyboardView?.reconfigureKeys()
+            scheduleToolbarUpdate()
+        }
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        predictionWorkItem?.cancel()
+        predictionWorkItem = nil
+        inputHandler.stopBackspaceRepeat()
+        cursorDragController.touchesCancelled()
+        longPressController.touchesCancelled()
+        dismissPopup()
+        if backspaceSwipeActive { exitBackspaceWordMode(commit: false) }
+    }
+
+    deinit {
+        predictionWorkItem?.cancel()
+        layoutManager.onLayoutChange = nil
+        layoutManager.onShiftChange = nil
     }
 
     override func textDidChange(_ textInput: (any UITextInput)?) {
         super.textDidChange(textInput)
-        updateToolbarPredictions()
+        scheduleToolbarUpdate()
     }
 
     // MARK: - Setup
@@ -66,11 +125,7 @@ final class KeyboardViewController: UIInputViewController {
     private func applySettings() {
         theme = resolvedTheme()
 
-        heightConstraint?.isActive = false
-        let hc = view.heightAnchor.constraint(equalToConstant: settings.keyboardHeight)
-        hc.priority = .required
-        hc.isActive = true
-        heightConstraint = hc
+        (view as? TactlInputView)?.keyboardHeight = settings.keyboardHeight
 
         cursorDragController.longPressDuration = settings.longPressDuration
         cursorDragController.verticalEnabled = settings.spaceCursorVerticalEnabled
@@ -82,13 +137,16 @@ final class KeyboardViewController: UIInputViewController {
 
         inputHandler.layoutManager = layoutManager
         inputHandler.hapticIntensity = settings.hapticIntensity
+        inputHandler.soundEnabled = settings.soundEnabled
         inputHandler.delegate = self
 
         clipboardManager.configure(
             maxEntries: settings.clipboardMaxEntries,
             enabled: settings.clipboardEnabled
         )
-        HapticEngine.shared.prepare()
+        DispatchQueue.global(qos: .utility).async {
+            HapticEngine.shared.prepare()
+        }
     }
 
     private func rebuildKeyboard() {
@@ -107,11 +165,14 @@ final class KeyboardViewController: UIInputViewController {
         if !hasFullAccess && settings.clipboardEnabled {
             kv.showFullAccessBanner(true)
         }
-        layoutManager.onChange = { [weak self] in
+        layoutManager.onLayoutChange = { [weak self] in
             self?.keyboardView?.refresh()
-            self?.updateToolbarPredictions()
+            self?.scheduleToolbarUpdate()
         }
-        updateToolbarPredictions()
+        layoutManager.onShiftChange = { [weak self] in
+            self?.keyboardView?.reconfigureKeys()
+        }
+        scheduleToolbarUpdate()
     }
 
     private func resolvedTheme() -> KeyboardTheme {
@@ -122,111 +183,132 @@ final class KeyboardViewController: UIInputViewController {
         }
     }
 
+    // MARK: - Personal dictionary
+
+    private func loadPersonalDictionary() {
+        let words = PersonalDictionary.load()
+        // UITextChecker.learnWord is class-level and thread-safe.
+        for word in words {
+            UITextChecker.learnWord(word)
+        }
+        let lowered = Set(words.map { $0.lowercased() })
+        DispatchQueue.main.async { [weak self] in
+            self?.personalWords = lowered
+        }
+    }
+
+    private func learnTypedWord(_ word: String) {
+        let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if PersonalDictionary.add(trimmed) {
+            personalWords.insert(trimmed.lowercased())
+            UITextChecker.learnWord(trimmed)
+            inputHandler.fireFeedback()
+        }
+    }
+
     // MARK: - Predictions
 
-    private func updateToolbarPredictions() {
-        guard layoutManager.page == .letters else {
-            keyboardView?.updatePredictions([])
+    private func scheduleToolbarUpdate() {
+        predictionWorkItem?.cancel()
+        let isLetters = layoutManager.page == .letters
+        let context = textDocumentProxy.documentContextBeforeInput ?? ""
+        if !isLetters {
+            keyboardView?.updatePredictionTriplet(PredictionTriplet())
             return
         }
-        let context = textDocumentProxy.documentContextBeforeInput ?? ""
-        let words = computePredictions(for: context)
-        keyboardView?.updatePredictions(words)
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let triplet = self.computeTriplet(for: context)
+            DispatchQueue.main.async {
+                self.keyboardView?.updatePredictionTriplet(triplet)
+            }
+        }
+        predictionWorkItem = item
+        // Background queue keeps UITextChecker off the main thread.
+        predictionQueue.asyncAfter(deadline: .now() + 0.12, execute: item)
     }
 
-    private func computePredictions(for context: String) -> [String] {
-        let checker = UITextChecker()
-        let lang = UITextChecker.availableLanguages.first ?? "en_US"
-
-        // Extract the current partial word being typed
-        let trimmed = context
-        guard !trimmed.isEmpty else { return [] }
-
-        // Find last word (partial)
-        let nsContext = trimmed as NSString
+    private func computeTriplet(for context: String) -> PredictionTriplet {
+        // Cap context: only the last 200 chars are relevant for last-word prediction.
+        let capped: String = {
+            if context.count <= 200 { return context }
+            return String(context.suffix(200))
+        }()
+        let nsContext = capped as NSString
         let lastWordRange = nsContext.range(of: "\\S+$", options: .regularExpression)
+        guard lastWordRange.location != NSNotFound else { return PredictionTriplet() }
 
-        var results: [String] = []
+        let partial = nsContext.substring(with: lastWordRange)
+        let partialNS = partial as NSString
+        let range = NSRange(location: 0, length: partialNS.length)
+        let lang = "en_US"
 
-        if lastWordRange.location != NSNotFound {
-            let partial = nsContext.substring(with: lastWordRange)
-            let partialNS = partial as NSString
-            let range = NSRange(location: 0, length: partialNS.length)
+        var triplet = PredictionTriplet()
+        triplet.typed = partial
 
-            // Completions for partial word
-            if let completions = checker.completions(forPartialWordRange: range, in: partial, language: lang) {
-                results = Array(completions.prefix(3))
-            }
-
-            // If no completions, try guesses (spell correction)
-            if results.isEmpty {
-                if let guesses = checker.guesses(forWordRange: range, in: partial, language: lang) {
-                    results = Array(guesses.prefix(3))
-                }
+        // Spell correction: only if word is misspelled
+        let misspelledRange = textChecker.rangeOfMisspelledWord(in: partial, range: range, startingAt: 0, wrap: false, language: lang)
+        if misspelledRange.location != NSNotFound {
+            if let guesses = textChecker.guesses(forWordRange: range, in: partial, language: lang),
+               let first = guesses.first, first.caseInsensitiveCompare(partial) != .orderedSame {
+                triplet.correction = first
             }
         }
 
-        return results
+        // Completion
+        if let completions = textChecker.completions(forPartialWordRange: range, in: partial, language: lang) {
+            let first = completions.first { $0.caseInsensitiveCompare(partial) != .orderedSame }
+            triplet.completion = first
+        }
+
+        return triplet
     }
 
-    // MARK: - Backspace swipe (word deletion)
+    // MARK: - Backspace dual mode
 
-    private func enterBackspaceSwipeMode(startX: CGFloat) {
+    private func enterBackspaceWordMode() {
+        guard !backspaceSwipeActive else { return }
         backspaceSwipeActive = true
-        backspaceSwipeStartX = startX
-        backspaceSwipeWordCount = 0
-        keyboardView?.showBackspaceIndicator(wordCount: 0)
+        backspaceWordCount = 0
         inputHandler.stopBackspaceRepeat()
+        keyboardView?.showBackspacePreview(deletionText: "")
     }
 
-    private func exitBackspaceSwipeMode(shouldDelete: Bool) {
+    private func exitBackspaceWordMode(commit: Bool) {
         guard backspaceSwipeActive else { return }
         backspaceSwipeActive = false
-        backspaceSwipeTimer?.invalidate()
-        backspaceSwipeTimer = nil
-
-        if shouldDelete && backspaceSwipeWordCount > 0 {
-            deleteWords(count: backspaceSwipeWordCount)
+        if commit && backspaceWordCount > 0 {
+            deleteWords(count: backspaceWordCount)
         }
-        keyboardView?.hideBackspaceIndicator()
+        backspaceWordCount = 0
+        keyboardView?.hideBackspacePreview()
     }
 
-    private func updateBackspaceSwipe(currentX: CGFloat) {
-        guard backspaceSwipeActive else { return }
-        let dx = backspaceSwipeStartX - currentX
-        guard dx > 0 else {
-            backspaceSwipeWordCount = 0
-            keyboardView?.showBackspaceIndicator(wordCount: 0)
-            return
+    private func updateBackspaceWordCount(currentX: CGFloat) {
+        let dx = backspaceTouchStartX - currentX
+        let count = max(0, Int(dx / backspacePointsPerWord))
+        guard count != backspaceWordCount else { return }
+        backspaceWordCount = count
+        keyboardView?.showBackspacePreview(deletionText: previewText(forWordCount: count))
+    }
+
+    private func previewText(forWordCount count: Int) -> String {
+        guard count > 0 else { return "" }
+        let tokens = tokenize(textDocumentProxy.documentContextBeforeInput ?? "")
+        var words: [String] = []
+        for token in tokens.reversed() where token.isWord {
+            words.insert(token.text, at: 0)
+            if words.count >= count { break }
         }
-        // Each ~30pt of leftward drag = 1 word
-        let wordCount = max(0, Int(dx / 30))
-        if wordCount != backspaceSwipeWordCount {
-            backspaceSwipeWordCount = wordCount
-            keyboardView?.showBackspaceIndicator(wordCount: wordCount)
-        }
+        return words.joined(separator: " ")
     }
 
     private func deleteWords(count: Int) {
         guard count > 0 else { return }
         let before = textDocumentProxy.documentContextBeforeInput ?? ""
         guard !before.isEmpty else { return }
-
-        // Tokenize into words+whitespace chunks, delete `count` word tokens from the right
-        var tokens: [(isWord: Bool, text: String)] = []
-        var current = ""
-        var inWord = false
-        for ch in before {
-            let isWordChar = !ch.isWhitespace
-            if isWordChar == inWord {
-                current.append(ch)
-            } else {
-                if !current.isEmpty { tokens.append((inWord, current)) }
-                current = String(ch)
-                inWord = isWordChar
-            }
-        }
-        if !current.isEmpty { tokens.append((inWord, current)) }
+        let tokens = tokenize(before)
 
         var wordsDeleted = 0
         var charsToDelete = 0
@@ -237,25 +319,44 @@ final class KeyboardViewController: UIInputViewController {
                 if wordsDeleted >= count { break }
             }
         }
-
         for _ in 0..<charsToDelete {
             textDocumentProxy.deleteBackward()
         }
-        HapticEngine.shared.fire(intensity: settings.hapticIntensity)
+        inputHandler.fireFeedback()
+    }
+
+    private func tokenize(_ text: String) -> [(isWord: Bool, text: String)] {
+        var tokens: [(Bool, String)] = []
+        var current = ""
+        var inWord = false
+        for ch in text {
+            let isWordChar = !ch.isWhitespace
+            if current.isEmpty {
+                current = String(ch)
+                inWord = isWordChar
+            } else if isWordChar == inWord {
+                current.append(ch)
+            } else {
+                tokens.append((inWord, current))
+                current = String(ch)
+                inWord = isWordChar
+            }
+        }
+        if !current.isEmpty { tokens.append((inWord, current)) }
+        return tokens
     }
 
     // MARK: - Popup
 
     private func presentPopup(for key: Key, sourceView: UIView) {
         dismissPopup()
-        guard let window = view.window else { return }
-
+        guard let container = keyboardView else { return }
         let popup = KeyPopupView(variants: key.variants, theme: theme)
         popup.onVariantSelected = { [weak self] variant in
             self?.inputHandler.handleVariantSelected(variant)
         }
-        popup.positionAbove(sourceView: sourceView, in: window)
-        window.addSubview(popup)
+        popup.positionAbove(sourceView: sourceView, in: container)
+        container.addSubview(popup)
         popupView = popup
     }
 
@@ -263,6 +364,35 @@ final class KeyboardViewController: UIInputViewController {
         popupView?.commitSelection()
         popupView?.removeFromSuperview()
         popupView = nil
+    }
+
+    // MARK: - Emoji panel
+
+    private func toggleEmojiPanel() {
+        if emojiPanel != nil {
+            dismissEmojiPanel()
+        } else {
+            presentEmojiPanel()
+        }
+    }
+
+    private func presentEmojiPanel() {
+        guard emojiPanel == nil else { return }
+        dismissPopup()
+        let panel = EmojiPanelView(theme: theme)
+        panel.delegate = self
+        // Use frame layout so the panel has correct bounds immediately — Auto Layout
+        // constraints resolve after the first layout pass, which means UICollectionView
+        // calls reloadData before its frame is set and renders no cells.
+        panel.frame = view.bounds
+        panel.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(panel)
+        emojiPanel = panel
+    }
+
+    private func dismissEmojiPanel() {
+        emojiPanel?.removeFromSuperview()
+        emojiPanel = nil
     }
 
     // MARK: - Clipboard panel
@@ -301,6 +431,11 @@ extension KeyboardViewController: KeyboardViewDelegate {
     ) {
         guard let touch = touches.first else { return }
 
+        // Any key touch (except the emoji toggle itself) dismisses the emoji panel.
+        if keyView.key.kind != .emojiSwitch {
+            dismissEmojiPanel()
+        }
+
         switch keyView.key.kind {
         case .space where settings.spaceCursorEnabled:
             cursorDragController.touchesBegan(at: touch.location(in: self.view))
@@ -308,16 +443,11 @@ extension KeyboardViewController: KeyboardViewDelegate {
         case .backspace:
             inputHandler.handleTap(keyView.key)
             inputHandler.startBackspaceRepeat()
-            // Start timer to enter swipe mode after longPressDuration
-            let startX = touch.location(in: self.view).x
-            backspaceSwipeTimer = Timer.scheduledTimer(
-                withTimeInterval: settings.longPressDuration,
-                repeats: false
-            ) { [weak self] _ in
-                self?.enterBackspaceSwipeMode(startX: startX)
-            }
+            backspaceTouchStartX = touch.location(in: self.view).x
+            backspaceTouchedDragThreshold = false
+            backspaceSwipeActive = false
 
-        case .nextKeyboard:
+        case .nextKeyboard, .emojiSwitch:
             break
 
         default:
@@ -334,14 +464,24 @@ extension KeyboardViewController: KeyboardViewDelegate {
         guard let touch = touches.first else { return }
         let loc = touch.location(in: self.view)
 
-        if keyView.key.kind == .backspace {
-            if backspaceSwipeActive {
-                updateBackspaceSwipe(currentX: loc.x)
+        switch keyView.key.kind {
+        case .backspace:
+            let dx = backspaceTouchStartX - loc.x
+            if !backspaceTouchedDragThreshold, dx > backspaceDragThreshold {
+                backspaceTouchedDragThreshold = true
+                enterBackspaceWordMode()
             }
-        } else if keyView.key.kind == .space && settings.spaceCursorEnabled {
+            if backspaceSwipeActive {
+                updateBackspaceWordCount(currentX: loc.x)
+            }
+
+        case .space where settings.spaceCursorEnabled:
             cursorDragController.touchesMoved(to: loc)
-        } else if longPressController.isShowingPopup {
-            popupView?.updateHighlight(screenPoint: touch.location(in: nil))
+
+        default:
+            if longPressController.isShowingPopup {
+                popupView?.updateHighlight(screenPoint: touch.location(in: nil))
+            }
         }
     }
 
@@ -358,27 +498,28 @@ extension KeyboardViewController: KeyboardViewDelegate {
             }
 
         case .backspace:
-            backspaceSwipeTimer?.invalidate()
-            backspaceSwipeTimer = nil
+            inputHandler.stopBackspaceRepeat()
             if backspaceSwipeActive {
-                exitBackspaceSwipeMode(shouldDelete: true)
-            } else {
-                inputHandler.stopBackspaceRepeat()
+                exitBackspaceWordMode(commit: true)
             }
 
         case .nextKeyboard:
             handleInputModeList(from: keyView, with: event ?? UIEvent())
 
+        case .emojiSwitch:
+            toggleEmojiPanel()
+
         default:
+            let wasConsumed = longPressController.isShowingPopup || longPressController.didConsume
             if longPressController.isShowingPopup {
                 dismissPopup()
-                longPressController.touchesEnded()
-            } else {
-                longPressController.touchesEnded()
+            }
+            longPressController.touchesEnded()
+            if !wasConsumed {
                 inputHandler.handleTap(keyView.key, sourceView: keyView, event: event)
             }
         }
-        updateToolbarPredictions()
+        scheduleToolbarUpdate()
     }
 
     func keyboardView(
@@ -387,41 +528,43 @@ extension KeyboardViewController: KeyboardViewDelegate {
         touches: Set<UITouch>,
         event: UIEvent?
     ) {
-        backspaceSwipeTimer?.invalidate()
-        backspaceSwipeTimer = nil
-        if backspaceSwipeActive {
-            exitBackspaceSwipeMode(shouldDelete: false)
-        }
         inputHandler.stopBackspaceRepeat()
+        if backspaceSwipeActive {
+            exitBackspaceWordMode(commit: false)
+        }
         cursorDragController.touchesCancelled()
         longPressController.touchesCancelled()
         dismissPopup()
     }
 
     func keyboardViewDidTapEmoji(_ view: KeyboardView, sourceView: UIView, event: UIEvent) {
-        handleInputModeList(from: sourceView, with: event)
+        toggleEmojiPanel()
     }
 
     func keyboardViewDidTapClipboard(_ view: KeyboardView) {
         presentClipboardPanel()
     }
 
-    func keyboardView(_ view: KeyboardView, didSelectPrediction word: String) {
-        // Replace the partial word before the cursor with the selected prediction
-        let before = textDocumentProxy.documentContextBeforeInput ?? ""
-        let nsStr = before as NSString
-        let lastWordRange = nsStr.range(of: "\\S+$", options: .regularExpression)
-        if lastWordRange.location != NSNotFound {
-            let partialWord = nsStr.substring(with: lastWordRange)
-            for _ in 0..<partialWord.count {
-                textDocumentProxy.deleteBackward()
+    func keyboardView(_ view: KeyboardView, didTapPrediction kind: PredictionKind, word: String) {
+        switch kind {
+        case .typed:
+            learnTypedWord(word)
+            scheduleToolbarUpdate()
+
+        case .correction, .completion:
+            // Replace the partial word with the chosen word + trailing space
+            let before = textDocumentProxy.documentContextBeforeInput ?? ""
+            let nsStr = before as NSString
+            let lastWordRange = nsStr.range(of: "\\S+$", options: .regularExpression)
+            if lastWordRange.location != NSNotFound {
+                let partialLen = (nsStr.substring(with: lastWordRange) as NSString).length
+                for _ in 0..<partialLen { textDocumentProxy.deleteBackward() }
             }
+            textDocumentProxy.insertText(word + " ")
+            layoutManager.autoLowerAfterInput()
+            inputHandler.fireFeedback()
+            scheduleToolbarUpdate()
         }
-        textDocumentProxy.insertText(word + " ")
-        layoutManager.autoLowerAfterInput()
-        HapticEngine.shared.fire(intensity: settings.hapticIntensity)
-        UIDevice.current.playInputClick()
-        updateToolbarPredictions()
     }
 }
 
@@ -456,6 +599,20 @@ extension KeyboardViewController: InputHandlerDelegate {
 
     func advanceToNextInputMode(from view: UIView, with event: UIEvent?) {
         handleInputModeList(from: view, with: event ?? UIEvent())
+    }
+}
+
+// MARK: - EmojiPanelDelegate
+
+extension KeyboardViewController: EmojiPanelDelegate {
+    func emojiPanel(_ panel: EmojiPanelView, didSelectEmoji emoji: String) {
+        textDocumentProxy.insertText(emoji)
+        inputHandler.fireFeedback()
+        // Don't auto-dismiss — user likely wants to insert multiple emoji.
+    }
+
+    func emojiPanelDidDismiss(_ panel: EmojiPanelView) {
+        dismissEmojiPanel()
     }
 }
 

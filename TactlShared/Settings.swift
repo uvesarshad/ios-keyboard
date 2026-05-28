@@ -26,7 +26,7 @@ enum ThemeMode: String, Codable, CaseIterable {
     }
 }
 
-struct TactlSettings: Codable {
+struct TactlSettings: Codable, Equatable {
     var keyboardHeight: CGFloat = 280
     var longPressDuration: TimeInterval = 0.3
     var spaceCursorEnabled: Bool = true
@@ -35,9 +35,35 @@ struct TactlSettings: Codable {
     var clipboardEnabled: Bool = true
     var clipboardMaxEntries: Int = 20
     var hapticIntensity: HapticIntensity = .light
+    var soundEnabled: Bool = true
     var theme: ThemeMode = .system
     var keyPopupEnabled: Bool = true
     var onboardingDismissed: Bool = false
+
+    enum CodingKeys: String, CodingKey {
+        case keyboardHeight, longPressDuration, spaceCursorEnabled,
+             spaceCursorVerticalEnabled, numberRowEnabled, clipboardEnabled,
+             clipboardMaxEntries, hapticIntensity, soundEnabled, theme,
+             keyPopupEnabled, onboardingDismissed
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        keyboardHeight = try c.decodeIfPresent(CGFloat.self, forKey: .keyboardHeight) ?? 280
+        longPressDuration = try c.decodeIfPresent(TimeInterval.self, forKey: .longPressDuration) ?? 0.3
+        spaceCursorEnabled = try c.decodeIfPresent(Bool.self, forKey: .spaceCursorEnabled) ?? true
+        spaceCursorVerticalEnabled = try c.decodeIfPresent(Bool.self, forKey: .spaceCursorVerticalEnabled) ?? false
+        numberRowEnabled = try c.decodeIfPresent(Bool.self, forKey: .numberRowEnabled) ?? true
+        clipboardEnabled = try c.decodeIfPresent(Bool.self, forKey: .clipboardEnabled) ?? true
+        clipboardMaxEntries = try c.decodeIfPresent(Int.self, forKey: .clipboardMaxEntries) ?? 20
+        hapticIntensity = try c.decodeIfPresent(HapticIntensity.self, forKey: .hapticIntensity) ?? .light
+        soundEnabled = try c.decodeIfPresent(Bool.self, forKey: .soundEnabled) ?? true
+        theme = try c.decodeIfPresent(ThemeMode.self, forKey: .theme) ?? .system
+        keyPopupEnabled = try c.decodeIfPresent(Bool.self, forKey: .keyPopupEnabled) ?? true
+        onboardingDismissed = try c.decodeIfPresent(Bool.self, forKey: .onboardingDismissed) ?? false
+    }
 }
 
 // Used by the containing app (SwiftUI)

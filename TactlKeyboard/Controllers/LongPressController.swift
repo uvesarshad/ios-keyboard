@@ -19,11 +19,15 @@ final class LongPressController {
     private var pendingKey: Key?
     private var pendingSourceView: UIView?
     private(set) var isShowingPopup = false
+    /// True if the long-press fired (either popup shown or single variant typed).
+    /// The caller should NOT also type the base character on touchesEnded.
+    private(set) var didConsume = false
 
     func touchesBegan(key: Key, sourceView: UIView) {
         cancel()
         pendingKey = key
         pendingSourceView = sourceView
+        didConsume = false
         timer = Timer.scheduledTimer(withTimeInterval: longPressDuration, repeats: false) { [weak self] _ in
             self?.timerFired()
         }
@@ -68,11 +72,15 @@ final class LongPressController {
     private func timerFired() {
         guard let key = pendingKey, let sourceView = pendingSourceView else { return }
         if key.kind == .comma {
+            didConsume = true
             delegate?.longPressControllerOpenSettings(self)
             return
         }
         guard !key.variants.isEmpty else { return }
+        // Always show the popup, even for single-variant keys — gives visual feedback
+        // of what will be typed, and the user commits by lifting the finger.
         isShowingPopup = true
+        didConsume = true
         delegate?.longPressController(self, showPopupFor: key, sourceView: sourceView)
     }
 }

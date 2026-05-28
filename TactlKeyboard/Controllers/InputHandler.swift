@@ -11,14 +11,14 @@ final class InputHandler {
     weak var delegate: InputHandlerDelegate?
     var layoutManager: LayoutManager?
     var hapticIntensity: HapticIntensity = .light
+    var soundEnabled: Bool = true
 
     private var lastInputWasSpace = false
     private var backspaceTimer: Timer?
 
     func handleTap(_ key: Key, sourceView: UIView? = nil, event: UIEvent? = nil) {
         guard let proxy = delegate?.textDocumentProxy else { return }
-        fireHaptic()
-        UIDevice.current.playInputClick()
+        fireFeedback()
 
         switch key.kind {
         case .character:
@@ -71,7 +71,7 @@ final class InputHandler {
         case .clipboard:
             delegate?.showClipboardPanel()
 
-        case .nextKeyboard:
+        case .nextKeyboard, .emojiSwitch:
             if let sv = sourceView, let ev = event {
                 delegate?.advanceToNextInputMode(from: sv, with: ev)
             }
@@ -82,8 +82,7 @@ final class InputHandler {
         delegate?.textDocumentProxy.insertText(variant)
         lastInputWasSpace = false
         layoutManager?.autoLowerAfterInput()
-        fireHaptic()
-        UIDevice.current.playInputClick()
+        fireFeedback()
     }
 
     func startBackspaceRepeat() {
@@ -98,9 +97,16 @@ final class InputHandler {
         backspaceTimer = nil
     }
 
-    // Haptics do NOT require Full Access on iOS — only pasteboard does.
-    private func fireHaptic() {
-        guard hapticIntensity != .off else { return }
-        HapticEngine.shared.fire(intensity: hapticIntensity)
+    deinit {
+        backspaceTimer?.invalidate()
+    }
+
+    func fireFeedback() {
+        if hapticIntensity != .off {
+            HapticEngine.shared.fire(intensity: hapticIntensity)
+        }
+        if soundEnabled {
+            UIDevice.current.playInputClick()
+        }
     }
 }

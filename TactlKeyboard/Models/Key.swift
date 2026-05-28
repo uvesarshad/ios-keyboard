@@ -11,7 +11,8 @@ struct Key {
         case symbol2Toggle  // =\<
         case letterToggle   // ABC
         case clipboard
-        case nextKeyboard
+        case nextKeyboard   // legacy; iOS now shows its own input switcher
+        case emojiSwitch
         case comma
         case period
     }

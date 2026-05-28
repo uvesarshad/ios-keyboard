@@ -7,7 +7,7 @@ protocol KeyboardViewDelegate: AnyObject {
     func keyboardView(_ view: KeyboardView, touchesCancelledOn keyView: KeyView, touches: Set<UITouch>, event: UIEvent?)
     func keyboardViewDidTapEmoji(_ view: KeyboardView, sourceView: UIView, event: UIEvent)
     func keyboardViewDidTapClipboard(_ view: KeyboardView)
-    func keyboardView(_ view: KeyboardView, didSelectPrediction word: String)
+    func keyboardView(_ view: KeyboardView, didTapPrediction kind: PredictionKind, word: String)
 }
 
 final class KeyboardView: UIView {
@@ -43,23 +43,40 @@ final class KeyboardView: UIView {
         theme = newTheme
         backgroundColor = newTheme.keyboardBackground
         toolbar.applyTheme(newTheme)
-        refresh()
+        reconfigureKeys()
     }
 
+    /// Full rebuild — call when the set of keys changes (page swap, settings change).
     func refresh() {
         rebuild()
     }
 
-    func updatePredictions(_ words: [String]) {
-        toolbar.updatePredictions(words)
+    /// Light update — call when only shift state changes. Reuses existing key views.
+    func reconfigureKeys() {
+        guard !keyViews.isEmpty else { return }
+        var iter = keyViews.makeIterator()
+        for row in cachedRows {
+            for key in row {
+                guard let kv = iter.next() else { continue }
+                kv.configure(
+                    labelText: layoutManager.labelForKey(key),
+                    theme: theme,
+                    shiftState: layoutManager.shiftState
+                )
+            }
+        }
     }
 
-    func showBackspaceIndicator(wordCount: Int) {
-        toolbar.showBackspaceIndicator(wordCount: wordCount)
+    func updatePredictionTriplet(_ triplet: PredictionTriplet) {
+        toolbar.updatePredictionTriplet(triplet)
     }
 
-    func hideBackspaceIndicator() {
-        toolbar.hideBackspaceIndicator()
+    func showBackspacePreview(deletionText: String) {
+        toolbar.showBackspacePreview(deletionText: deletionText)
+    }
+
+    func hideBackspacePreview() {
+        toolbar.hideBackspacePreview()
     }
 
     func showFullAccessBanner(_ show: Bool) {
@@ -102,9 +119,9 @@ final class KeyboardView: UIView {
             guard let self else { return }
             self.delegate?.keyboardViewDidTapClipboard(self)
         }
-        toolbar.onPredictionSelected = { [weak self] word in
+        toolbar.onPredictionTapped = { [weak self] kind, word in
             guard let self else { return }
-            self.delegate?.keyboardView(self, didSelectPrediction: word)
+            self.delegate?.keyboardView(self, didTapPrediction: kind, word: word)
         }
     }
 
@@ -127,6 +144,11 @@ final class KeyboardView: UIView {
             for key in row {
                 let kv = KeyView(key: key)
                 kv.delegate = self
+                kv.configure(
+                    labelText: layoutManager.labelForKey(key),
+                    theme: theme,
+                    shiftState: layoutManager.shiftState
+                )
                 addSubview(kv)
                 keyViews.append(kv)
             }
@@ -171,11 +193,6 @@ final class KeyboardView: UIView {
                 guard let kv = keyViewIter.next() else { continue }
                 let w = max(1, unit * key.widthWeight)
                 kv.frame = CGRect(x: x, y: rowY, width: w, height: rowH)
-                kv.configure(
-                    labelText: layoutManager.labelForKey(key),
-                    theme: theme,
-                    shiftState: layoutManager.shiftState
-                )
                 x += w + keyGap
             }
         }

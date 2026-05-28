@@ -71,12 +71,15 @@ final class KeyPopupView: UIView {
         onVariantSelected?(variants[selectedIndex])
     }
 
-    func positionAbove(sourceView: UIView, in window: UIWindow) {
-        let sourceFrame = sourceView.convert(sourceView.bounds, to: window)
+    func positionAbove(sourceView: UIView, in container: UIView) {
+        let sourceFrame = sourceView.convert(sourceView.bounds, to: container)
         var x = sourceFrame.midX - frame.width / 2
-        // Clamp to window bounds
-        x = max(4, min(x, window.bounds.width - frame.width - 4))
-        let y = sourceFrame.minY - frame.height - 4
-        frame.origin = CGPoint(x: x, y: max(4, y))
+        x = max(4, min(x, container.bounds.width - frame.width - 4))
+        var y = sourceFrame.minY - frame.height - 4
+        // If popup would extend above container top, position below the key instead
+        if y < 4 {
+            y = sourceFrame.maxY + 4
+        }
+        frame.origin = CGPoint(x: x, y: y)
     }
 }

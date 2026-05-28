@@ -4,9 +4,13 @@ enum Page { case letters, symbols1, symbols2 }
 enum ShiftState { case off, on, caps }
 
 final class LayoutManager {
-    var page: Page = .letters { didSet { onChange?() } }
-    var shiftState: ShiftState = .off { didSet { onChange?() } }
-    var onChange: (() -> Void)?
+    var page: Page = .letters { didSet { onLayoutChange?() } }
+    var shiftState: ShiftState = .off { didSet { onShiftChange?() } }
+
+    // Heavy: needs full rebuild (page change swaps key set)
+    var onLayoutChange: (() -> Void)?
+    // Light: same keys, just re-render labels/colors
+    var onShiftChange: (() -> Void)?
 
     var activeRows: [[Key]] {
         switch page {

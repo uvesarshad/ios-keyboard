@@ -12,6 +12,7 @@ final class KeyView: UIView {
     weak var delegate: KeyViewDelegate?
 
     private let label = UILabel()
+    private let altLabel = UILabel()
     private var normalBackground: UIColor = .white
     private var pressedBackground: UIColor = .lightGray
 
@@ -29,6 +30,10 @@ final class KeyView: UIView {
         layer.shadowOffset = CGSize(width: 0, height: 1)
         layer.shadowOpacity = 0.3
         layer.shadowRadius = 0
+        // shouldRasterize + shadowPath drops the per-frame offscreen pass that
+        // shadows normally trigger — important when rendering 30+ keys.
+        layer.shouldRasterize = true
+        layer.rasterizationScale = UIScreen.main.scale
         layer.masksToBounds = false
 
         label.textAlignment = .center
@@ -41,6 +46,16 @@ final class KeyView: UIView {
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
+
+        altLabel.textAlignment = .right
+        altLabel.font = .systemFont(ofSize: 10, weight: .regular)
+        altLabel.translatesAutoresizingMaskIntoConstraints = false
+        altLabel.isUserInteractionEnabled = false
+        addSubview(altLabel)
+        NSLayoutConstraint.activate([
+            altLabel.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            altLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+        ])
     }
 
     func configure(labelText: String, theme: KeyboardTheme, shiftState: ShiftState) {
@@ -50,12 +65,36 @@ final class KeyView: UIView {
         normalBackground = theme.backgroundColor(for: key, shiftState: shiftState)
         pressedBackground = normalBackground.withAlphaComponent(0.5)
         backgroundColor = normalBackground
+
+        if let firstVariant = key.variants.first, key.kind == .character || key.kind == .comma || key.kind == .period {
+            altLabel.text = firstVariant
+            altLabel.textColor = theme.keyText.withAlphaComponent(0.45)
+            altLabel.isHidden = false
+        } else {
+            altLabel.isHidden = true
+        }
     }
 
     func setPressed(_ pressed: Bool) {
-        UIView.animate(withDuration: 0.08, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
-            self.backgroundColor = pressed ? self.pressedBackground : self.normalBackground
+        // Instant on press, brief fade on release — keeps typing feel snappy.
+        if pressed {
+            backgroundColor = pressedBackground
+        } else {
+            UIView.animate(
+                withDuration: 0.05,
+                delay: 0,
+                options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]
+            ) {
+                self.backgroundColor = self.normalBackground
+            }
         }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // Pre-compute shadow path so CoreAnimation doesn't trace the layer alpha mask
+        // every frame. Update on every layout so shape stays correct on resize.
+        layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: layer.cornerRadius).cgPath
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {

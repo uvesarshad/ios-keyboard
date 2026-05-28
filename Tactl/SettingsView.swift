@@ -13,19 +13,22 @@ struct SettingsView: View {
                 layoutSection
                 clipboardSection
                 hapticsSection
+                soundSection
                 themeSection
+                dictionarySection
                 aboutSection
             }
             .navigationTitle("Tactl Keyboard")
         }
-        .onChange(of: store.current.keyboardHeight) { _ in store.save() }
-        .onChange(of: store.current.longPressDuration) { _ in store.save() }
-        .onChange(of: store.current.spaceCursorEnabled) { _ in store.save() }
-        .onChange(of: store.current.spaceCursorVerticalEnabled) { _ in store.save() }
-        .onChange(of: store.current.numberRowEnabled) { _ in store.save() }
-        .onChange(of: store.current.clipboardEnabled) { _ in store.save() }
-        .onChange(of: store.current.hapticIntensity) { _ in store.save() }
-        .onChange(of: store.current.theme) { _ in store.save() }
+        .onChange(of: store.current.keyboardHeight) { store.save() }
+        .onChange(of: store.current.longPressDuration) { store.save() }
+        .onChange(of: store.current.spaceCursorEnabled) { store.save() }
+        .onChange(of: store.current.spaceCursorVerticalEnabled) { store.save() }
+        .onChange(of: store.current.numberRowEnabled) { store.save() }
+        .onChange(of: store.current.clipboardEnabled) { store.save() }
+        .onChange(of: store.current.hapticIntensity) { store.save() }
+        .onChange(of: store.current.soundEnabled) { store.save() }
+        .onChange(of: store.current.theme) { store.save() }
     }
 
     @ViewBuilder
@@ -113,6 +116,55 @@ struct SettingsView: View {
             }
             .pickerStyle(.segmented)
         }
+    }
+
+    private var soundSection: some View {
+        Section("Sound") {
+            Toggle("Key click sound", isOn: $store.current.soundEnabled)
+            Text("iOS also requires Settings → Sounds & Haptics → Keyboard Feedback → Sound to be ON.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @State private var dictionaryWords: [String] = PersonalDictionary.load()
+    @State private var newWord: String = ""
+
+    private var dictionarySection: some View {
+        Section("Personal Dictionary") {
+            HStack {
+                TextField("Add word", text: $newWord)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Button("Add") {
+                    if PersonalDictionary.add(newWord) {
+                        newWord = ""
+                        dictionaryWords = PersonalDictionary.load()
+                    }
+                }
+                .disabled(newWord.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            if dictionaryWords.isEmpty {
+                Text("No learned words yet. Tap the leftmost chip in the keyboard toolbar to teach a word.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(dictionaryWords, id: \.self) { word in
+                    HStack {
+                        Text(word)
+                        Spacer()
+                        Button(role: .destructive) {
+                            PersonalDictionary.remove(word)
+                            dictionaryWords = PersonalDictionary.load()
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+        }
+        .onAppear { dictionaryWords = PersonalDictionary.load() }
     }
 
     private var themeSection: some View {
