@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		6997FD6D2FC7F1B100C889A7 /* TactlKeyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6997FD662FC7F1B100C889A7 /* TactlKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		6997FD462FC7E7F400C889A7 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,13 +25,45 @@
 			remoteGlobalIDString = 6997FD372FC7E7ED00C889A7;
 			remoteInfo = Tactl;
 		};
+		6997FD6B2FC7F1B100C889A7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6997FD302FC7E7ED00C889A7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6997FD652FC7F1B100C889A7;
+			remoteInfo = TactlKeyboard;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		6997FD722FC7F1B100C889A7 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				6997FD6D2FC7F1B100C889A7 /* TactlKeyboard.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		6997FD382FC7E7ED00C889A7 /* Tactl.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Tactl.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6997FD452FC7E7F400C889A7 /* TactlTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TactlTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6997FD4F2FC7E7F400C889A7 /* TactlUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TactlUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6997FD662FC7F1B100C889A7 /* TactlKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TactlKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		6997FD6E2FC7F1B100C889A7 /* Exceptions for "TactlKeyboard" folder in "TactlKeyboard" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 6997FD652FC7F1B100C889A7 /* TactlKeyboard */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		6997FD3A2FC7E7ED00C889A7 /* Tactl */ = {
@@ -43,6 +79,19 @@
 		6997FD522FC7E7F400C889A7 /* TactlUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = TactlUITests;
+			sourceTree = "<group>";
+		};
+		6997FD672FC7F1B100C889A7 /* TactlKeyboard */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				6997FD6E2FC7F1B100C889A7 /* Exceptions for "TactlKeyboard" folder in "TactlKeyboard" target */,
+			);
+			path = TactlKeyboard;
+			sourceTree = "<group>";
+		};
+		AABB00012FC7F1B100C889A7 /* TactlShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TactlShared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -69,6 +118,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6997FD632FC7F1B100C889A7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -78,6 +134,8 @@
 				6997FD3A2FC7E7ED00C889A7 /* Tactl */,
 				6997FD482FC7E7F400C889A7 /* TactlTests */,
 				6997FD522FC7E7F400C889A7 /* TactlUITests */,
+				6997FD672FC7F1B100C889A7 /* TactlKeyboard */,
+				AABB00012FC7F1B100C889A7 /* TactlShared */,
 				6997FD392FC7E7ED00C889A7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,6 +146,7 @@
 				6997FD382FC7E7ED00C889A7 /* Tactl.app */,
 				6997FD452FC7E7F400C889A7 /* TactlTests.xctest */,
 				6997FD4F2FC7E7F400C889A7 /* TactlUITests.xctest */,
+				6997FD662FC7F1B100C889A7 /* TactlKeyboard.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -102,13 +161,16 @@
 				6997FD342FC7E7ED00C889A7 /* Sources */,
 				6997FD352FC7E7ED00C889A7 /* Frameworks */,
 				6997FD362FC7E7ED00C889A7 /* Resources */,
+				6997FD722FC7F1B100C889A7 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				6997FD6C2FC7F1B100C889A7 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				6997FD3A2FC7E7ED00C889A7 /* Tactl */,
+				AABB00012FC7F1B100C889A7 /* TactlShared */,
 			);
 			name = Tactl;
 			packageProductDependencies = (
@@ -163,6 +225,29 @@
 			productReference = 6997FD4F2FC7E7F400C889A7 /* TactlUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		6997FD652FC7F1B100C889A7 /* TactlKeyboard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6997FD6F2FC7F1B100C889A7 /* Build configuration list for PBXNativeTarget "TactlKeyboard" */;
+			buildPhases = (
+				6997FD622FC7F1B100C889A7 /* Sources */,
+				6997FD632FC7F1B100C889A7 /* Frameworks */,
+				6997FD642FC7F1B100C889A7 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				6997FD672FC7F1B100C889A7 /* TactlKeyboard */,
+				AABB00012FC7F1B100C889A7 /* TactlShared */,
+			);
+			name = TactlKeyboard;
+			packageProductDependencies = (
+			);
+			productName = TactlKeyboard;
+			productReference = 6997FD662FC7F1B100C889A7 /* TactlKeyboard.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -184,6 +269,9 @@
 						CreatedOnToolsVersion = 26.3;
 						TestTargetID = 6997FD372FC7E7ED00C889A7;
 					};
+					6997FD652FC7F1B100C889A7 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 				};
 			};
 			buildConfigurationList = 6997FD332FC7E7ED00C889A7 /* Build configuration list for PBXProject "Tactl" */;
@@ -203,6 +291,7 @@
 				6997FD372FC7E7ED00C889A7 /* Tactl */,
 				6997FD442FC7E7F400C889A7 /* TactlTests */,
 				6997FD4E2FC7E7F400C889A7 /* TactlUITests */,
+				6997FD652FC7F1B100C889A7 /* TactlKeyboard */,
 			);
 		};
 /* End PBXProject section */
@@ -223,6 +312,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		6997FD4D2FC7E7F400C889A7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6997FD642FC7F1B100C889A7 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,6 +349,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6997FD622FC7F1B100C889A7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -265,6 +368,11 @@
 			isa = PBXTargetDependency;
 			target = 6997FD372FC7E7ED00C889A7 /* Tactl */;
 			targetProxy = 6997FD502FC7E7F400C889A7 /* PBXContainerItemProxy */;
+		};
+		6997FD6C2FC7F1B100C889A7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6997FD652FC7F1B100C889A7 /* TactlKeyboard */;
+			targetProxy = 6997FD6B2FC7F1B100C889A7 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -395,6 +503,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Tactl/Tactl.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = G6HB7T7GSC;
@@ -410,7 +519,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = uves.Tactl;
+				PRODUCT_BUNDLE_IDENTIFIER = com.uves.tactl;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -427,6 +536,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Tactl/Tactl.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = G6HB7T7GSC;
@@ -442,7 +552,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = uves.Tactl;
+				PRODUCT_BUNDLE_IDENTIFIER = com.uves.tactl;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -538,6 +648,64 @@
 			};
 			name = Release;
 		};
+		6997FD702FC7F1B100C889A7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = TactlKeyboard/TactlKeyboard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G6HB7T7GSC;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TactlKeyboard/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = TactlKeyboard;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.uves.tactl.keyboard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		6997FD712FC7F1B100C889A7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = TactlKeyboard/TactlKeyboard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G6HB7T7GSC;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TactlKeyboard/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = TactlKeyboard;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.uves.tactl.keyboard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -573,6 +741,15 @@
 			buildConfigurations = (
 				6997FD602FC7E7F400C889A7 /* Debug */,
 				6997FD612FC7E7F400C889A7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6997FD6F2FC7F1B100C889A7 /* Build configuration list for PBXNativeTarget "TactlKeyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6997FD702FC7F1B100C889A7 /* Debug */,
+				6997FD712FC7F1B100C889A7 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
